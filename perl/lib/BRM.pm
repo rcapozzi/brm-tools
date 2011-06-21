@@ -19,6 +19,7 @@ BEGIN {
 
 # module vars and their defaults
 my $Indent = 2;
+my ($tn0, $tn1);
 
 # This is more about flist than testnap.
 my %Type2Str = (
@@ -77,25 +78,34 @@ sub new {
 	return $bless;
 }
 
-sub connect3 {
+sub xop {
+	my($c, $opcode, $opflags, $doc) = @_;
+	my %h = \$c;
+	printf $tn0 "r << +++ 1\n";
+	printf $tn0 "%s\n", $doc;
+	printf $tn0 "+++\n";
+	printf $tn0 "xop %s %s 1\n", $opcode, $opflags;
+	$c->testnap_read;
+}
+
+sub testnap_read {
 	my($c) = @_;
 	my %h = \$c;
-	if ($h{tn_pid} != 0 ){
-		$c->quit();
+	my ($elapsed) = 0.0;
+	my @doc = [];
+	printf "## Reading testnap enter\n";	
+	while (my $line = <$tn1>){
+		printf "## <testnap says>$line";
+		chomp $line;
+		push @doc, $line;
+		if ($line =~ /^time: ([0-9\.]+)$/){
+			$elapsed = $1;
+			last;
+		}
 	}
-
-	my($wtr, $rdr, $err) = (0,0,0);
-	my $pid = ::open3($wtr, $rdr, $err, 'testnap');
-	printf "## Connected to testnap\n";
-	printf $wtr "p logging on\n";
-	printf $wtr "p op_timing on\n";
-
-	printf "## Reading testnap\n";
-	while (my $line = <$rdr>){
-		printf "## Read $line\n";
-	}
-	$h{tn_pid} = $pid;
-	printf "Connected pid: ${pid}\n";	
+	$h{last_op_elapsed} = $1;
+	$h{total_op_elapsed} += $1;	
+	printf "## Reading testnap exit\n";		
 }
 
 sub connect {
@@ -105,15 +115,49 @@ sub connect {
 		$c->quit();
 	}
 
+	use File::Spec;
+	use Symbol qw(gensym);
+	use IO::File;
+	#$tn0 = IO::File->new_tmpfile;
+	#printf ::Dumper($rdrx);
+	printf ::Dumper(IO::File->new_tmpfile);
+	
+	my($wtr, $rdr, $err) = (gensym, gensym, 0);
+	($tn0, $tn1, $err) = (gensym, gensym, 0);
+
+	my $pid = ::open3($tn0, $tn1, $err, 'testnap');
+	
+	$h {
+		tn_pid=>$pid, tn0=>$wtr, tn1=>$rdr, tn2=>$err,
+	};
+	$h{last_op_elapsed} = 0.0;
+	$h{total_op_elapsed} = 0.0;	
+
+	printf $tn0 "p op_timing on\n";
+	printf $tn0 "# Connected\n";
+	printf $tn0 "id\n";
+	$c->testnap_read();
+	return;
+}
+
+sub connect2 {
+	my($c) = @_;
+	my %h = \$c;
+	if ($h{tn_pid} != 0 ){
+		$c->quit();
+	}
+
 	my($rdr, $wtr);
 	$rdr = ">&";
-	my $tn_pid = ::open2($rdr, \*Writer, "testnap 2>/dev/null");
+	my $tn_pid = ::open2($rdr, \*Writer, "testnap")
+	|| die "Bad open";
+	printf Writer "echo connected\n";
 	printf Writer "p logging on\n";
 	printf Writer "p op_timing on\n";
-	printf Writer "robj - DB /account 1\n";
+	printf Writer "robj - DB /account 1\n\n";
 
 	printf "## Reading testnap pipe output\n";
-	while (my $line = <Reader>){
+	while (my $line = <$rdr>){
 		printf "## testnap:<$line>\n";
 		last;
 	}
@@ -121,7 +165,7 @@ sub connect {
 	$h{tn_pid} = $tn_pid;
 
 	printf "## Return %s\n", $?;
-	printf "Connected pid: ${tn_pid}\n";
+	printf "## Connected pid: ${tn_pid}\n";
 	
 }
 
@@ -219,6 +263,7 @@ sub hash2doc {
 	if ($level == 0){
 		my @doc = ();
 		foreach (@ary){
+			# A fine example of how Perl sucks.
 			my $line = sprintf "%s %-30s %10s [%s] %s", 
 				$_->[0], $_->[1], $_->[2], $_->[3], $_->[4];
 			push @doc, $line;
