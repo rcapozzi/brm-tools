@@ -1,37 +1,27 @@
 #!/usr/bin/env perl
 
-# Shell
-# TAP::*
-# Test::*
-# Test::Tutorial
+use strict;
+use IO::Select;
+use IPC::Open2;
+use IPC::Open3;
 
 package BRM::Testnap;
 
-require Exporter;
 use Carp;
 
+our (@ISA);
+
 BEGIN {
+	require Exporter;
     @ISA = qw(Exporter);
     #@EXPORT = qw(BRM);
 }
 
 # module vars and their defaults
-$Indent = 2 unless defined $Indent;
+my $Indent = 2;
 
 # This is more about flist than testnap.
-%XXStr2Type = (
-		"INT" => 1,
-		"ENUM" => 3,
-		"STR" => 5,
-		"POID" => 7,
-		"TSTAMP" => 8,
-		"ARRAY" => 9,
-		"STRUCT" => 10,
-		"DECIMAL" => 14,
-		"TIME" => 15,
-		);
-
-%Type2Str = (
+my %Type2Str = (
 			 1 => "INT",
 			 3 => "ENUM",
 			 5 => "STR",
@@ -43,7 +33,7 @@ $Indent = 2 unless defined $Indent;
 			15 => "TIME",
 		);
 
-$Fields_ref;
+my $Fields_ref;
 
 sub convert_sdk_fields {
 	my ($c, $sdk_hash) = @_;
@@ -52,13 +42,13 @@ sub convert_sdk_fields {
 	# The key is the rec_id. Useless junk.
 	# v is a hash with name, num, type.
 	while (my($k,$v) = each (%$sdk_hash)) {
-		$href{$v->{PIN_FLD_FIELD_NAME}} = [
-			$v->{PIN_FLD_FIELD_NUM},
-			$v->{PIN_FLD_FIELD_TYPE},
-			$Type2Str{$v->{PIN_FLD_FIELD_TYPE}}
-		];
+		$hash{$v->{PIN_FLD_FIELD_NAME}} = [
+				$v->{PIN_FLD_FIELD_NUM},
+				$v->{PIN_FLD_FIELD_TYPE},
+				$Type2Str{$v->{PIN_FLD_FIELD_TYPE}}
+			];
 	}
-	return \%href;
+	return \%hash;
 }
 
 sub set_dd_fields {
@@ -74,7 +64,79 @@ sub new {
 		level => 0,
 		indent => $Indent,
 	};
-	return bless($s, $c);
+
+	my $bless = bless($s, $c);
+	
+	$bless->connect;
+	
+	# Boot strap our own data dictionary.
+	# $tn->get_sdk_field();
+	#my $href = $tn->convert_sdk_fields($sdk_hash->{'PIN_FLD_FIELD'});
+	#$tn->set_dd_fields($href);
+	
+	return $bless;
+}
+
+sub connect3 {
+	my($c) = @_;
+	my %h = \$c;
+	if ($h{tn_pid} != 0 ){
+		$c->quit();
+	}
+
+	my($wtr, $rdr, $err) = (0,0,0);
+	my $pid = ::open3($wtr, $rdr, $err, 'testnap');
+	printf "## Connected to testnap\n";
+	printf $wtr "p logging on\n";
+	printf $wtr "p op_timing on\n";
+
+	printf "## Reading testnap\n";
+	while (my $line = <$rdr>){
+		printf "## Read $line\n";
+	}
+	$h{tn_pid} = $pid;
+	printf "Connected pid: ${pid}\n";	
+}
+
+sub connect {
+	my($c) = @_;
+	my %h = \$c;
+	if ($h{tn_pid} != 0 ){
+		$c->quit();
+	}
+
+	my($rdr, $wtr);
+	$rdr = ">&";
+	my $tn_pid = ::open2($rdr, \*Writer, "testnap 2>/dev/null");
+	printf Writer "p logging on\n";
+	printf Writer "p op_timing on\n";
+	printf Writer "robj - DB /account 1\n";
+
+	printf "## Reading testnap pipe output\n";
+	while (my $line = <Reader>){
+		printf "## testnap:<$line>\n";
+		last;
+	}
+	
+	$h{tn_pid} = $tn_pid;
+
+	printf "## Return %s\n", $?;
+	printf "Connected pid: ${tn_pid}\n";
+	
+}
+
+sub quit {
+	my($c) = @_;
+	my %h = \$c;
+	printf $h{tn0}, "q\n";
+	waitpid($h{tn_pid}, 0);
+	$h{
+		tn_exit_status => $? >> 8,
+		tn_pid => 0,
+		tn0 => 0,
+		tn1 => 0,
+		tn2 => 0,
+	};
 }
 
 sub doc2hash {
@@ -88,7 +150,7 @@ sub doc2hash {
 	my ($level, $fld_name, $fld_type, $fld_idx, $fld_value);
 	foreach my $line (@ary) {
 
-		next if line =~ /^#/;
+		next if $line =~ /^#/;
 		if ($line =~ /^(\d+)\s+(.*?)\s+(\w+)\s+\[(\d+)\]\s*(.*$)/) {
 			($level, $fld_name, $fld_type, $fld_idx, $fld_value) = (int($1), $2, $3, $4, $5);
 		} else {
@@ -120,40 +182,51 @@ sub doc2hash {
 	return \%main;
 }
 
-# Convert a hash into a doc. The challenge is that the keys don't 
+# Convert a hash into a doc. The doc is passed to testnap.
+# The challenge is that the keys don't 
 # contain the data type that the doc needs to include.
 #
 # A boot strap is needed to first get the DD Objects. Use testnap.
 # hash = xop("PCM_OP_SDK_GET_FLD_SPECS",0,"0 PIN_FLD_POID POID [0] 0.0.0.1 /dd/objects 0 0")
-
 sub hash2doc {
 	my ($c, $hash, $level, $idx) = @_;
-	my @doc = ();
+	my @ary = ();
 	$level ||= 0;
 	$idx ||=0;
-	printf "## hash2doc enter level=${level} idx=$idx\n";
-	printf "## hash2doc convert %s", ::Dumper($hash);
-	#printf "## hash2doc Fields %s", ::Dumper($Fields_ref);
+	#printf "## hash2doc enter level=${level} idx=$idx\n";
+	#printf "## hash2doc convert %s", ::Dumper($hash);
 	while (my($fld_name,$fld_value) = each (%$hash)) {
 		my $fld_type = $Fields_ref->{$fld_name}->[2]
 			|| die "Unknown field \"$fld_name\"";
-		printf "## hash2doc loop %-25s %10s [0] %s\n", $fld_name, $fld_type, $fld_value;
+		# printf "## hash2doc loop %-25s %10s [0] %s\n", $fld_name, $fld_type, $fld_value;
+
+		# Should we branch on the DD field type or the Perl type?
 		if (ref($fld_value) eq "HASH"){
 			while (my($idx,$subhash) = each (%$fld_value)) {
-				my @subdoc = $c->hash2doc($subhash,$level+1, $idx);
+				push @ary, [$level, $fld_name, $fld_type, $idx, ""];
+				my @subdoc = $c->hash2doc($subhash, $level+1, $idx);
+				foreach my $elem (@subdoc){
+					push(@ary, @$elem);
+				}
 			}
-			# First daddy. Then the kids.
-			push @doc, [$level, $fld_name, $fld_type, $idx, $fld_value];
-			foreach $elem (@subdoc) {
-				push @doc, [ $elem ];
-			}
+
 		} else {
-			push @doc, [$level, $fld_name, $fld_type, 0, $fld_value];
+			push @ary, [$level, $fld_name, $fld_type, 0, $fld_value];
 		}
 	}
-
-	printf "## hash2doc exit\n";
-	return \@doc;
+	
+	# Convert each element of the array to a string.
+	if ($level == 0){
+		my @doc = ();
+		foreach (@ary){
+			my $line = sprintf "%s %-30s %10s [%s] %s", 
+				$_->[0], $_->[1], $_->[2], $_->[3], $_->[4];
+			push @doc, $line;
+		}
+		return join("\n", @doc);
+	}
+	#printf "## hash2doc exit\n";
+	return \@ary;
 }
 
 1;

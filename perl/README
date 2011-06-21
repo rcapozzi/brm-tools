@@ -1,0 +1,7 @@
+This folder is for Perl-based efforts.
+
+BRM::Testnap
+
+This is Perl module that drives testnap through pipes. This module
+allows a Perl programmer to interact with BRM using Perl's Hashes.
+
