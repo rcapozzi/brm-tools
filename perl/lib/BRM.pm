@@ -119,11 +119,8 @@ sub connect {
 	use Symbol qw(gensym);
 	use IO::File;
 	#$tn0 = IO::File->new_tmpfile;
-	#printf ::Dumper($rdrx);
-	printf ::Dumper(IO::File->new_tmpfile);
-	
-	my($wtr, $rdr, $err) = (gensym, gensym, 0);
-	($tn0, $tn1, $err) = (gensym, gensym, 0);
+
+	my($tn0, $tn1, $err) = (gensym, gensym, 0);
 
 	my $pid = ::open3($tn0, $tn1, $err, 'testnap');
 	
@@ -177,9 +174,6 @@ sub quit {
 	$h{
 		tn_exit_status => $? >> 8,
 		tn_pid => 0,
-		tn0 => 0,
-		tn1 => 0,
-		tn2 => 0,
 	};
 }
 
