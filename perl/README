@@ -1,7 +1,9 @@
-This folder is for Perl-based efforts.
+This folder is for Perl-based efforts. For sure, this is an effort to reach the basement first.
 
 BRM::Testnap
 
-This is Perl module that drives testnap through pipes. This module
-allows a Perl programmer to interact with BRM using Perl's Hashes.
+This Perl module drives testnap through pipes. The module allows a Perl programmer to interact with BRM using Perl's Hashes.
 
+With Perl and testnap, you should be able to make some useful one off programs that can use you favorite, system level Perl. You don't need a 32 bit build with a, b and c limits.
+
+Java is, as always an option for BRM. If you are bad enough to use Perl, you are certainly with enough poor judgement to use Java. Show me a LOCK CAS.
