@@ -120,6 +120,11 @@ sub connect {
 	use IO::File;
 	#$tn0 = IO::File->new_tmpfile;
 
+	# I cannot grok the gensym. I get ref. But def of the thing. Hating Perl is unworthy love.
+	# Perl is that land in the sand from which we became better. Great ideas can be butter.
+	# I'd rather everything be part of the classes (instance?) href, but see above.
+	# I try to limit these things b/c I cannot find the doc to describe scope.
+	# Is Perl the new COBOL? Stop insulting COBOL.
 	my($tn0, $tn1, $err) = (gensym, gensym, 0);
 
 	my $pid = ::open3($tn0, $tn1, $err, 'testnap');
