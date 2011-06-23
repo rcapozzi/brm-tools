@@ -2,7 +2,6 @@
 
 use strict;
 use IO::Select;
-use IPC::Open2;
 use IPC::Open3;
 
 package BRM::Testnap;
@@ -19,7 +18,8 @@ BEGIN {
 
 # module vars and their defaults
 my $Indent = 2;
-my ($tn0, $tn1);
+my $Debug = 0;
+my ($tn0, $tn1, $tn2);
 
 # This is more about flist than testnap.
 my %Type2Str = (
@@ -64,50 +64,74 @@ sub new {
 	my ($s) = {
 		level => 0,
 		indent => $Indent,
+	    last_op_elapsed => 0.0,
+		total_op_elapsed => 0.0,
 	};
 
 	my $bless = bless($s, $c);
-	
 	$bless->connect;
-	
-	# Boot strap our own data dictionary.
-	# $tn->get_sdk_field();
-	#my $href = $tn->convert_sdk_fields($sdk_hash->{'PIN_FLD_FIELD'});
-	#$tn->set_dd_fields($href);
-	
 	return $bless;
 }
 
-sub xop {
-	my($c, $opcode, $opflags, $doc) = @_;
-	my %h = \$c;
-	printf $tn0 "r << +++ 1\n";
-	printf $tn0 "%s\n", $doc;
-	printf $tn0 "+++\n";
-	printf $tn0 "xop %s %s 1\n", $opcode, $opflags;
-	$c->testnap_read;
-}
 
+# joining an array of strings is better than constantly appending to one.
 sub testnap_read {
 	my($c) = @_;
 	my %h = \$c;
 	my ($elapsed) = 0.0;
-	my @doc = [];
-	printf "## Reading testnap enter\n";	
+	my @doc = ();
+	$Debug && printf STDERR "## Reading testnap enter\n";	
 	while (my $line = <$tn1>){
-		printf "## <testnap says>$line";
-		chomp $line;
-		push @doc, $line;
+		# printf STDERR "## <testnap says>$line";
+		next if $line =~ /^(nap|#)/;
 		if ($line =~ /^time: ([0-9\.]+)$/){
 			$elapsed = $1;
 			last;
 		}
+		chomp $line;
+		push @doc, $line;
 	}
-	$h{last_op_elapsed} = $1;
-	$h{total_op_elapsed} += $1;	
-	printf "## Reading testnap exit\n";		
+	$h{opcode_calls} += 1;
+	$h{last_op_elapsed} = $elapsed;
+	$h{total_op_elapsed} += $elapsed;	
+	my $out = join("\n",@doc);
+	$Debug && printf  STDERR "## Reading testnap exit. %s lines. %d chars. %s\n", $#doc+1, length($out), $c->stats;
+	return $out;
 }
 
+sub stats {
+	my($c) = @_;
+	my %h = \$c;
+	sprintf "## calls=%d, elapsed=%d",
+		$c->{opcode_calls},
+		$c->{total_op_elapsed};
+}
+
+sub xop {
+	my($c, $opcode, $opflags, $doc) = @_;
+	$c->{opcode_calls}++;
+	printf $tn0 "r << +++ 1\n";
+	printf $tn0 "%s\n", $doc;
+	printf $tn0 "+++\n";
+	printf $tn0 "xop %s %s 1\n", $opcode, $opflags;
+	my $output = $c->testnap_read;
+	return $c->doc2hash($output);
+}
+
+sub loopback {
+	my($c) = @_;
+	my %h = \$c;
+	my $doc =<<END
+r << +++ 1
+0 PIN_FLD_POID              POID [0] 0.0.0.1 /dummy -1
++++
+xop PCM_OP_TEST_LOOPBACK 0 1
+END
+;
+	printf $tn0 $doc;
+	$c->testnap_read();
+}
+	
 sub connect {
 	my($c) = @_;
 	my %h = \$c;
@@ -118,63 +142,33 @@ sub connect {
 	use File::Spec;
 	use Symbol qw(gensym);
 	use IO::File;
-	#$tn0 = IO::File->new_tmpfile;
 
-	# I cannot grok the gensym. I get ref. But def of the thing. Hating Perl is unworthy love.
-	# Perl is that land in the sand from which we became better. Great ideas can be butter.
-	# I'd rather everything be part of the classes (instance?) href, but see above.
-	# I try to limit these things b/c I cannot find the doc to describe scope.
 	# Is Perl the new COBOL? Stop insulting COBOL.
-	my($tn0, $tn1, $err) = (gensym, gensym, 0);
+	($tn0, $tn1, $tn2) = (gensym, gensym, gensym);
 
-	my $pid = ::open3($tn0, $tn1, $err, 'testnap');
-	
+	my $pid = ::open3($tn0, $tn1, $tn2, 'testnap');	
 	$h {
-		tn_pid=>$pid, tn0=>$wtr, tn1=>$rdr, tn2=>$err,
+		tn_pid=>$pid, tn0=>$tn0, tn1=>$tn1, tn2=>$tn2,
 	};
 	$h{last_op_elapsed} = 0.0;
 	$h{total_op_elapsed} = 0.0;	
 
 	printf $tn0 "p op_timing on\n";
-	printf $tn0 "# Connected\n";
-	printf $tn0 "id\n";
-	$c->testnap_read();
+	# Run an xop to flush stdout
+	$c->loopback;
+	
+	my $doc = "0 PIN_FLD_POID           POID [0] 0.0.0.1 /dd/fields 0 0";
+	my $sdk_hash = $c->xop("PCM_OP_GET_DD", 0, $doc);
+	my $href = $c->convert_sdk_fields($sdk_hash->{'PIN_FLD_FIELD'});
+	$c->set_dd_fields($href);
 	return;
 }
 
-sub connect2 {
-	my($c) = @_;
-	my %h = \$c;
-	if ($h{tn_pid} != 0 ){
-		$c->quit();
-	}
-
-	my($rdr, $wtr);
-	$rdr = ">&";
-	my $tn_pid = ::open2($rdr, \*Writer, "testnap")
-	|| die "Bad open";
-	printf Writer "echo connected\n";
-	printf Writer "p logging on\n";
-	printf Writer "p op_timing on\n";
-	printf Writer "robj - DB /account 1\n\n";
-
-	printf "## Reading testnap pipe output\n";
-	while (my $line = <$rdr>){
-		printf "## testnap:<$line>\n";
-		last;
-	}
-	
-	$h{tn_pid} = $tn_pid;
-
-	printf "## Return %s\n", $?;
-	printf "## Connected pid: ${tn_pid}\n";
-	
-}
 
 sub quit {
 	my($c) = @_;
 	my %h = \$c;
-	printf $h{tn0}, "q\n";
+	printf $tn0, "q\n";
 	waitpid($h{tn_pid}, 0);
 	$h{
 		tn_exit_status => $? >> 8,
@@ -189,16 +183,16 @@ sub doc2hash {
 	my @stack;           # For any level, point to the current hashref.
 	push @stack, \%main;
 
-	# printf "## doc2hash enter\n";;
+	$Debug && printf STDERR "## doc2hash enter\n";;
 	my ($level, $fld_name, $fld_type, $fld_idx, $fld_value);
+	my $lineno = 0;
 	foreach my $line (@ary) {
-
+		$lineno++;
 		next if $line =~ /^#/;
 		if ($line =~ /^(\d+)\s+(.*?)\s+(\w+)\s+\[(\d+)\]\s*(.*$)/) {
 			($level, $fld_name, $fld_type, $fld_idx, $fld_value) = (int($1), $2, $3, $4, $5);
 		} else {
-			croak "Bad initial line parse for \"$line\"\n";
-			next;
+			croak "Bad initial line parse. Line ${lineno} \"$line\"\n";
 		}
 
 		if ($fld_type =~ /STR|POID/) {
@@ -210,18 +204,18 @@ sub doc2hash {
 			if ($fld_value =~ /\((\d+?)\)/){
 				$fld_value = int($1);
 			} else {
-				croak "Bad parse value \"$fld_value\"";
+				croak "Bad parse value. Line ${lineno} \"$fld_value\"";
 			}
 			$stack[$level]->{$fld_name} = $fld_value;
 		} elsif ($fld_type =~ /ARRAY|SUBSTRUCT/) {
 			$stack[$level]->{$fld_name}->{$fld_idx} = {};
 			$stack[$level+1] = $stack[$level]->{$fld_name}->{$fld_idx};
 		} else {
-			croak "Bad parse of \"$line\"";
+			croak "Bad parse. Line ${lineno} \"$line\"";
 		}
 		# printf "## Parsed: %s %-30s %6s [%s] %s\n", $level, $fld_name, $fld_type, $fld_idx, $fld_value;
 	}
-	# printf "## doc2hash exit\n";
+	$Debug && printf STDERR "## doc2hash exit\n";
 	return \%main;
 }
 
@@ -237,7 +231,6 @@ sub hash2doc {
 	$level ||= 0;
 	$idx ||=0;
 	#printf "## hash2doc enter level=${level} idx=$idx\n";
-	#printf "## hash2doc convert %s", ::Dumper($hash);
 	while (my($fld_name,$fld_value) = each (%$hash)) {
 		my $fld_type = $Fields_ref->{$fld_name}->[2]
 			|| die "Unknown field \"$fld_name\"";
