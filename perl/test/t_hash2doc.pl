@@ -37,10 +37,5 @@ $hash = {
 
 printf "%s\n", $tn->hash2doc($hash);
 
-for (my $i=0;$i<10;$i++){
-	printf "%d %s\n", $i, $tn->loopback;
-}
-printf "STATS: %s\n", $tn->stats;
-
 printf "## END\n";
 

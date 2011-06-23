@@ -18,7 +18,7 @@ BEGIN {
 
 # module vars and their defaults
 my $Indent = 2;
-my $Debug = 0;
+my $Debug = 1;
 my ($tn0, $tn1, $tn2);
 
 # This is more about flist than testnap.
@@ -96,7 +96,7 @@ sub testnap_read {
 	$c->{last_op_elapsed} = $elapsed;
 	$c->{total_op_elapsed} += $elapsed;	
 	my $out = join("\n",@doc);
-	$Debug && printf  STDERR "## Reading testnap exit. %s lines. %d chars. %s\n", $#doc+1, length($out), $c->stats;
+	$Debug && printf  STDERR "## Reading testnap exit. %s lines. %d chars.\n", $#doc+1, length($out);
 	return $out;
 }
 
@@ -108,7 +108,7 @@ sub stats {
 		$c->{total_op_elapsed};
 }
 
-sub xop {
+sub xop_doc {
 	my($c, $opcode, $opflags, $doc) = @_;
 	printf $tn0 "r << +++ 1\n";
 	printf $tn0 "%s\n", $doc;
@@ -116,6 +116,12 @@ sub xop {
 	printf $tn0 "xop %s %s 1\n", $opcode, $opflags;
 	my $output = $c->testnap_read;
 	return $c->doc2hash($output);
+}
+
+sub xop {
+	my($c, $opcode, $opflags, $hash) = @_;
+	my $doc = $c->hash2doc($hash);
+	return $c->xop_doc($opcode, $opflags, $doc);
 }
 
 sub loopback {
@@ -159,9 +165,10 @@ sub connect {
 	$c->loopback;
 	
 	my $doc = "0 PIN_FLD_POID           POID [0] 0.0.0.1 /dd/fields 0 0";
-	my $sdk_hash = $c->xop("PCM_OP_GET_DD", 0, $doc);
+	my $sdk_hash = $c->xop_doc("PCM_OP_GET_DD", 0, $doc);
 	my $href = $c->convert_sdk_fields($sdk_hash->{'PIN_FLD_FIELD'});
 	$c->set_dd_fields($href);
+	$Debug && printf $tn0 "p logging on\n";
 	return;
 }
 
@@ -208,6 +215,8 @@ sub doc2hash {
 		} elsif ($fld_type =~ /ARRAY|SUBSTRUCT/) {
 			$stack[$level]->{$fld_name}->{$fld_idx} = {};
 			$stack[$level+1] = $stack[$level]->{$fld_name}->{$fld_idx};
+		} elsif ($fld_type eq "BUF") {
+			next;
 		} else {
 			croak "Bad parse. Line ${lineno} \"$line\"";
 		}
@@ -228,7 +237,7 @@ sub hash2doc {
 	my @ary = ();
 	$level ||= 0;
 	$idx ||=0;
-	#printf "## hash2doc enter level=${level} idx=$idx\n";
+	$Debug && printf STDERR "## hash2doc enter level=${level} idx=$idx\n";
 	while (my($fld_name,$fld_value) = each (%$hash)) {
 		my $fld_type = $Fields_ref->{$fld_name}->[2]
 			|| die "Unknown field \"$fld_name\"";
@@ -250,17 +259,25 @@ sub hash2doc {
 	}
 	
 	# Convert each element of the array to a string.
+	my $line;
+	my $format;
 	if ($level == 0){
 		my @doc = ();
 		foreach (@ary){
-			# A fine example of how Perl sucks.
-			my $line = sprintf "%s %-30s %10s [%s] %s", 
-				$_->[0], $_->[1], $_->[2], $_->[3], $_->[4];
+			if ($_->[2] eq "STR"){
+				$format = "%s %-30s %10s [%s] \"%s\"";
+			} elsif ($_->[2] eq "TSTAMP"){
+				$format = "%s %-30s %10s [%s] (%s)";
+			}
+			else {
+				$format = "%s %-30s %10s [%s] %s";
+			}
+			$line = sprintf $format, $_->[0], $_->[1], $_->[2], $_->[3], $_->[4];
 			push @doc, $line;
 		}
 		return join("\n", @doc);
 	}
-	#printf "## hash2doc exit\n";
+	$Debug && printf STDERR "## hash2doc exit\n";
 	return \@ary;
 }
 
