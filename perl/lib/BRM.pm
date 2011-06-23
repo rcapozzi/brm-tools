@@ -66,6 +66,8 @@ sub new {
 		indent => $Indent,
 	    last_op_elapsed => 0.0,
 		total_op_elapsed => 0.0,
+		tn_pid => 0,
+		opcode_calls => 0,
 	};
 
 	my $bless = bless($s, $c);
@@ -77,7 +79,6 @@ sub new {
 # joining an array of strings is better than constantly appending to one.
 sub testnap_read {
 	my($c) = @_;
-	my %h = \$c;
 	my ($elapsed) = 0.0;
 	my @doc = ();
 	$Debug && printf STDERR "## Reading testnap enter\n";	
@@ -91,9 +92,9 @@ sub testnap_read {
 		chomp $line;
 		push @doc, $line;
 	}
-	$h{opcode_calls} += 1;
-	$h{last_op_elapsed} = $elapsed;
-	$h{total_op_elapsed} += $elapsed;	
+	$c->{opcode_calls} += 1;
+	$c->{last_op_elapsed} = $elapsed;
+	$c->{total_op_elapsed} += $elapsed;	
 	my $out = join("\n",@doc);
 	$Debug && printf  STDERR "## Reading testnap exit. %s lines. %d chars. %s\n", $#doc+1, length($out), $c->stats;
 	return $out;
@@ -109,7 +110,6 @@ sub stats {
 
 sub xop {
 	my($c, $opcode, $opflags, $doc) = @_;
-	$c->{opcode_calls}++;
 	printf $tn0 "r << +++ 1\n";
 	printf $tn0 "%s\n", $doc;
 	printf $tn0 "+++\n";
@@ -134,8 +134,8 @@ END
 	
 sub connect {
 	my($c) = @_;
-	my %h = \$c;
-	if ($h{tn_pid} != 0 ){
+
+	if ($c->{tn_pid} != 0 ){
 		$c->quit();
 	}
 
@@ -147,11 +147,12 @@ sub connect {
 	($tn0, $tn1, $tn2) = (gensym, gensym, gensym);
 
 	my $pid = ::open3($tn0, $tn1, $tn2, 'testnap');	
-	$h {
-		tn_pid=>$pid, tn0=>$tn0, tn1=>$tn1, tn2=>$tn2,
-	};
-	$h{last_op_elapsed} = 0.0;
-	$h{total_op_elapsed} = 0.0;	
+	$c->{tn_pid} = $pid;
+	$c->{tn0} = $tn0;
+	$c->{tn1} = $tn1;
+	$c->{tn2} = $tn2;
+	$c->{last_op_elapsed} = 0.0;
+	$c->{total_op_elapsed} = 0.0;	
 
 	printf $tn0 "p op_timing on\n";
 	# Run an xop to flush stdout
@@ -167,13 +168,10 @@ sub connect {
 
 sub quit {
 	my($c) = @_;
-	my %h = \$c;
 	printf $tn0, "q\n";
-	waitpid($h{tn_pid}, 0);
-	$h{
-		tn_exit_status => $? >> 8,
-		tn_pid => 0,
-	};
+	waitpid($c->{tn_pid}, 0);
+	$c->{tn_exit_status} = $? >> 8;
+	$c->{tn_pid} = 0;
 }
 
 sub doc2hash {
