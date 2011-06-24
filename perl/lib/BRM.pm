@@ -18,7 +18,7 @@ BEGIN {
 
 # module vars and their defaults
 my $Indent = 2;
-my $Debug = 1;
+my $Debug = 0;
 my ($tn0, $tn1, $tn2);
 
 # This is more about flist than testnap.
@@ -108,6 +108,8 @@ sub stats {
 		$c->{total_op_elapsed};
 }
 
+# Take a doc, run through testnap, return its output.
+# Doc in. Doc out.
 sub xop_doc {
 	my($c, $opcode, $opflags, $doc) = @_;
 	printf $tn0 "r << +++ 1\n";
@@ -115,13 +117,15 @@ sub xop_doc {
 	printf $tn0 "+++\n";
 	printf $tn0 "xop %s %s 1\n", $opcode, $opflags;
 	my $output = $c->testnap_read;
-	return $c->doc2hash($output);
+	return $output;
 }
 
+# Take a hash. Return a hash.
 sub xop {
 	my($c, $opcode, $opflags, $hash) = @_;
 	my $doc = $c->hash2doc($hash);
-	return $c->xop_doc($opcode, $opflags, $doc);
+	my $doc_out = $c->xop_doc($opcode, $opflags, $doc);
+	return $c->doc2hash($doc_out);
 }
 
 sub loopback {
@@ -165,7 +169,8 @@ sub connect {
 	$c->loopback;
 	
 	my $doc = "0 PIN_FLD_POID           POID [0] 0.0.0.1 /dd/fields 0 0";
-	my $sdk_hash = $c->xop_doc("PCM_OP_GET_DD", 0, $doc);
+	my $sdk_doc = $c->xop_doc("PCM_OP_GET_DD", 0, $doc);
+	my $sdk_hash = $c->doc2hash($sdk_doc);
 	my $href = $c->convert_sdk_fields($sdk_hash->{'PIN_FLD_FIELD'});
 	$c->set_dd_fields($href);
 	$Debug && printf $tn0 "p logging on\n";
@@ -240,7 +245,7 @@ sub hash2doc {
 	$Debug && printf STDERR "## hash2doc enter level=${level} idx=$idx\n";
 	while (my($fld_name,$fld_value) = each (%$hash)) {
 		my $fld_type = $Fields_ref->{$fld_name}->[2]
-			|| die "Unknown field \"$fld_name\"";
+			|| carp "Unknown field \"$fld_name\"";
 		# printf "## hash2doc loop %-25s %10s [0] %s\n", $fld_name, $fld_type, $fld_value;
 
 		# Should we branch on the DD field type or the Perl type?

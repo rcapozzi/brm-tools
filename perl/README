@@ -1,9 +1,26 @@
-This folder is for Perl-based efforts. For sure, this is an effort to reach the basement first.
+This folder is for Perl-based efforts. For sure, this is an effort to
+ reach the basement first.
 
 BRM::Testnap
 
-This Perl module drives testnap through pipes. The module allows a Perl programmer to interact with BRM using Perl's Hashes.
+  $tn = BRM::Testnap->new;
+  $out_hash = $tn->xop("PCM_OP_READ_OBJ", 0, $hash);
+  printf "%s\n", $out_hash->{PIN_FLD_POID};
 
-With Perl and testnap, you should be able to make some useful one off programs that can use you favorite, system level Perl. You don't need a 32 bit build with a, b and c limits.
+This Perl module drives testnap through pipes. The module allows a Perl 
+programmer to interact with BRM using Perl's Hashes. 
 
-Java is, as always an option for BRM. If you are bad enough to use Perl, you are certainly with enough poor judgement to use Java. Show me a LOCK CAS.
+  * If the Perl program is short lived, you should consider the 
+    use of cm_proxy.
+     
+  * Your testnap should point to the custom fields extension.
+  
+TODO: Implement a wire-level alternative.
+
+With Perl and testnap, you should be able to make some useful one off 
+programs that can use you favorite, system level Perl. You don't need 
+a 32 bit build with a, b and c limits.
+
+Java is, as always an option for BRM. If you are bad enough to use Perl,
+you are certainly with enough poor judgement to use Java. 
+Show me a LOCK CAS instruction in Java and I'll show you my ?.
