@@ -1,0 +1,61 @@
+#!/bin/bash
+
+pid_file=$PIN_LOG_DIR/cm/cm.pid
+cm_restart(){
+	tick=0.35
+
+	rm $PIN_HOME/sys/cm/core.* >/dev/null 2>&1
+
+	printf "#"
+	if [[ -f $pid_file ]]; then
+		pid=`cat $pid_file`
+		stop_cm
+		while kill -0 $pid > /dev/null 2>&1; do printf "-"; sleep $tick; done;
+	fi
+
+	cat /dev/null > $PIN_LOG_DIR/cm/cm.pinlog
+	rm $PIN_HOME/sys/cm/valgrind* >/dev/null 2>&1
+	if [[ -n $HAVE_VALGRIND ]]; then
+		start_cm_vg
+	else
+		start_cm
+	fi
+
+	i=0
+	while ! tail -20 $PIN_LOG_DIR/cm/cm.pinlog|fgrep 'cm started at' >/dev/null 2>&1
+	do
+		printf "+"
+		let i+=1
+		sleep $tick
+		if [[ $i -gt 20 ]]; then
+			printf "\nERROR: Aborting after $i loops\n"
+			exit 1
+		fi
+	done
+
+	printf "\n# cm started in $i loops.\n"
+}
+
+
+cm_restart_required(){
+	for so in $PIN_HOME/lib/fm_*so $PIN_HOME/lib/bw_*so;
+	do
+		[[ $pid_file -ot $so ]] && {
+			echo "## CM Restart required. $so is out-of-date."
+			return 0
+		}
+	done
+	return 1
+}
+
+cmxx(){
+	cd $PIN_HOME/source/sys && make || exit
+	if cm_restart_required ; then
+		cm_restart
+	else
+		echo "## No cm restart required"
+	fi
+}
+# cat /dev/null > $PIN_LOG_DIR/cm/cm.pinlog
+
+cmxx
