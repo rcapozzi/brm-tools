@@ -1,9 +1,5 @@
 #!/usr/bin/env perl
 
-# Collect each multi-line log message into an array.
-# Run the pattern on that array.
-# Print the entire message if you match.
-
 $pattern = shift;
 @ary = ();
 
