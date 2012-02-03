@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+
+ipcs -m | gawk "\$3 ~ /$USER/ && \$6==0 {system(\"ipcrm -m \" \$2)}"
