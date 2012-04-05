@@ -8,6 +8,16 @@ module Pinlog
 			# ary.index(/pattern/)
 			pattern.match(message)
 		end
+		
+		def self.print_message(ary,regexp,invert)
+			message = ary.join
+			match = is_match?(message,regexp)
+			if (match and not invert)
+				puts message
+			elsif (invert and not match)
+				puts message
+			end
+		end
 
 		def self.process(io,options)
 			pattern = options[:pattern]
@@ -19,26 +29,14 @@ module Pinlog
 			ary = []
 			while line = io.gets
 				if new_message.match(line)
-					message = ary.join
-					match = is_match?(message,regexp)
-					if (match and not invert)
-						puts message
-					elsif (invert and not match)
-						puts message
-					end
+					print_message(ary,regexp,invert)
 					ary = []
 				end
 				ary << line
 			end
 
 			if ary.size > 0
-				message = ary.join
-				match = is_match?(message,regexp)
-				if (match and not invert)
-					puts message
-				elsif (invert and not match)
-					puts message
-				end
+				print_message(ary,regexp,invert)
 			end
 
 		end
