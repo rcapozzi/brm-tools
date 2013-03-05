@@ -52,13 +52,21 @@ if __FILE__ == $0
 		opts.on('-v', "Invert match like -v on grep. Select non-matching messages.") do |v|
 			options[:v] = v
 		end
+		opts.on('-d', "Enable debug.") do |d|
+			options[:d] = d
+		end
 	end
 	
 	optparse.parse!
 	options[:pattern] = ARGV.shift
-	
-	ARGV.each do |file|
-		File.open(file){|io| Pinlog::Grep.process(io,options) }
+
+	if ARGV.size == 0
+		$stderr.puts "## pattern=#{options[:pattern]}" if options[:d]
+		Pinlog::Grep.process($stdin,options)
+	else
+		ARGV.each do |file|
+			File.open(file){|io| Pinlog::Grep.process(io,options) }
+		end
 	end
 	
 end
