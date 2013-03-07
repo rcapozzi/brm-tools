@@ -54,7 +54,7 @@ module Pinlog
 		# args: A +Hash+ of options.
 		def self.process(io,args={})
 			buckets = Hash.new(0)
-			interval = args[:i]
+			interval = args[:interval].to_i * 60
 			tag = args[:tag]
 			
 			while line = io.gets
@@ -129,10 +129,10 @@ class PinlogCli < Thor
 	end
 	
 
-	desc "tally", 'Tally/count pinlog messages'
-	option :interval, aliases: "i", desc: "Interval in minutes"
-	option :t, desc: "Tag to append to line"
-	option :hist, desc: "Print a histogram"
+	desc "tally [FILES]", 'Tally/count pinlog messages'
+	option :interval, aliases: "-i", desc: "Interval in minutes", type: :numeric, default: 60
+	option :tag, aliases: "-t", desc: "Tag to append to line"
+	option :hist, desc: "Print a histogram", type: :boolean
 	def tally(*files)
 		if files.size == 0
 			Pinlog::Tally.process($stdin, options)
