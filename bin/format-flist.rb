@@ -1,5 +1,5 @@
-#!env ruby
-
+#!/usr/bin/ruby
+#
 def slurp(io=$stdin)
 
 	ary.each do |line|
@@ -40,11 +40,12 @@ def to_buf(doc)
 end
 
 def to_txt(ary, indent=2)
-	max_fld = ary.reject{|x| x.size < 2}.inject(0) { |memo,a| memo >= a[1].length ? memo : a[1].length }
-	max_lvl = ary.reject{|x| x.size < 2}.inject(0) { |memo,a| memo >= a[0].to_i ? memo : a[0].to_i}
-	min_lvl = ary.reject{|x| x.size < 2}.inject(99){ |memo,a| memo <= a[0].to_i ? memo : a[0].to_i}
-	max_indent = indent * max_lvl
-	max_fld_length = max_fld + (max_lvl * indent)
+	#max_fld = ary.reject{|x| x.size < 2}.inject(0) { |memo,a| memo >= a[1].length ? memo : a[1].length }
+	#max_lvl = ary.reject{|x| x.size < 2}.inject(0) { |memo,a| memo >= a[0].to_i ? memo : a[0].to_i}
+	#min_lvl = ary.reject{|x| x.size < 2}.inject(99){ |memo,a| memo <= a[0].to_i ? memo : a[0].to_i}
+	#max_indent = indent * max_lvl
+	#max_fld_length = max_fld + (max_lvl * indent)
+	max_fld_length = 36
 	format = "%s %-#{max_fld_length}s %9s [%s] %s"
 	ary.each do |flds|
 		if flds.size > 2
@@ -73,12 +74,12 @@ if $0 == __FILE__
 		to_txt(buf)
 		exit
 	end
-	
+
 	ARGV.each do |file|
 		ary = File.readlines(file)
 		buf = to_buf(ary)
 		to_txt(buf)
 	end
-	
+
 end
 
