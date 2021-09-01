@@ -7,8 +7,8 @@
 #include "pin_errs.h"
 #include "pinlog.h"
 #include "cm_fm.h"
-#include "xxx_flds.h"
-#include "ops/xxx_ops.h"
+#include "custom_flds.h"
+#include "ops/custom_ops.h"
 
 int is_verbose = 0;
 void *g_dl_handle = NULL;
@@ -17,7 +17,7 @@ static int
 read_file(const char *filename, char **content)
 {
 	if (is_verbose)
-		fprintf(stdout, "XXX Reading from %s\n", filename);
+		fprintf(stdout, "XXX reading file %s\n", filename);
 	char *source = NULL;
 	FILE *fp = fopen(filename, "r");
 	if (fp == NULL)
@@ -123,19 +123,23 @@ static int
 doit(pin_flist_t *in_flistp, pin_flist_t **out_flistpp, pin_errbuf_t *ebufp)
 {
 	cm_nap_connection_t *connp = NULL;
-	const char * fm_path = "../../../lib/fm_xxx_evt_pol.so";
-	const char *opname = "op_xxx_event_rate_change_notify";
+	const char * fm_path = "../../../lib/fm_custom.so";
+	const char *opname = "op_custom_foo";
 	void (*opcode_ptr)();
 
 	conn_open(&connp, ebufp);
 
+	opcode_ptr = load_opcode(fm_path, opname);
+
+	if(is_verbose)
 	fprintf(stdout, "XXX Calling opcode %s\n", opname);
 	opcode_ptr = load_opcode(fm_path, opname);
-	(*opcode_ptr)(connp, XXX_OP_EVENT_RATE_CHANGE_NOTIFY, 0, in_flistp, out_flistpp, ebufp);
+	(*opcode_ptr)(connp, CUSTOM_OP_FOO, 0, in_flistp, out_flistpp, ebufp);
 
 	if (PIN_ERR_IS_ERR(ebufp)){
-		fprintf(stderr, "ebufp is dirty\n");
+		fprintf(stderr, "ERROR: ebufp is error\n");
 	} else {
+		if(is_verbose)
 		fprintf(stderr, "ebufp is clean\n");
 	}
 
@@ -143,6 +147,23 @@ doit(pin_flist_t *in_flistp, pin_flist_t **out_flistpp, pin_errbuf_t *ebufp)
 	return 0;
 }
 
+int
+write_outfile(char *filename, pin_flist_t *flistp){
+	pin_errbuf_t ebuf;
+	PIN_ERR_CLEAR_ERR(&ebuf);
+	FILE *fptr;
+	fptr = fopen(filename,"w");
+   if(fptr == NULL)   {
+      fprintf(stderr, "Error opening output file %s\n", filename); 
+      exit(1);             
+   }
+	if (is_verbose)
+		fprintf(stdout, "# write output flist to file %s\n", filename); 
+	if (flistp){
+		PIN_FLIST_PRINT(flistp, fptr, &ebuf);
+	}
+	fclose(fptr);
+}
 
 int main(int argc, char **argv)
 {
@@ -151,6 +172,7 @@ int main(int argc, char **argv)
 	pin_flist_t *in_flistp = NULL;
 	pin_flist_t *out_flistp = NULL;
 	pin_errbuf_t ebuf, *ebufp;
+	char *output_file = NULL;
 
 	g_dl_handle = NULL;
 	ebufp = &ebuf;
@@ -163,17 +185,24 @@ int main(int argc, char **argv)
 	optind = 1;
 	opterr = 0;
 	char c;
-	while ((c = getopt(argc, argv, "df:v")) != (char)EOF)
+	while ((c = getopt(argc, argv, "di:o:v")) != (char)EOF)
 	{
 		switch (c)
 		{
-		case 'f':
+		case 'i':
 			PIN_FLIST_FLD_SET(opts_flistp, PIN_FLD_FILENAME, optarg, ebufp);
 			in_flistp = flist_from_file(optarg, ebufp);
+			if (PIN_ERR_IS_ERR(ebufp)){
+				fprintf(stderr, "ERROR: Bad read of flist from %s\n", optarg);
+				exit(1);
+			}
 			break;
 		case 'd':
 			PIN_ERR_SET_LEVEL(PIN_ERR_LEVEL_DEBUG);
 			is_debug = 1;
+			break;
+		case 'o':
+			output_file = strdup(optarg);
 			break;
 		case 'v':
 			is_verbose = 1;
@@ -183,18 +212,22 @@ int main(int argc, char **argv)
 		}
 	}
 
-	time_t now_t = pin_virtual_time(NULL);
-	PIN_FLIST_FLD_SET(in_flistp, PIN_FLD_WHEN_T, &now_t, ebufp);
+	//time_t now_t = pin_virtual_time(NULL);
+	//PIN_FLIST_FLD_SET(in_flistp, PIN_FLD_WHEN_T, &now_t, ebufp);
 
 	if (is_verbose){
-		fprintf(stdout, "Input flist:\n");
+		fprintf(stdout, "# input flist:\n");
 		PIN_FLIST_PRINT(in_flistp, NULL, ebufp);
 	}
 
 	doit(in_flistp, &out_flistp, &ebuf);
-
-	fprintf(stdout, "Return flist:\n");
+	if (output_file){
+		write_outfile(output_file, out_flistp);
+	}
+	if (is_verbose){
+		fprintf(stdout, "# return flist:\n");
 	PIN_FLIST_PRINT(out_flistp, NULL, ebufp);
+	}
 
 	dlclose(g_dl_handle);
 	PIN_FLIST_DESTROY_EX(&opts_flistp, NULL);

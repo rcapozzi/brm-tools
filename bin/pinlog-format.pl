@@ -12,7 +12,7 @@ my $ruler = sprintf("#%s\n", "-" x 60);
 
 while (<>) {
     if (/^[\s\t\0]*([DEW])\s+(.*?)\s+/){
-#print "header line: $_";
+print "header line: $_";
       $log_level = $1;
       if (/ cm:(\d+)/){
         $pid = $1;
@@ -27,7 +27,7 @@ while (<>) {
       @stack = ();
 
     } elsif ($state == 1 && /^([\s\t\0]*)(.*$)/){
-#print "message line: $_";
+print "message line: $_";
       $state = 2;
       $message = $2;
     } elsif (/^# number of field /){
@@ -45,7 +45,7 @@ while (<>) {
       my $line = sprintf("%s %-35s %10s [%d] %s\n", $fld_level, $fld_name, $fld_type, $fld_idx, $fld_value);
       push(@stack, $line);
     } else {
-#print "Unknown line: $_";
+print "Unknown line: $_";
       $state = -1;
       push(@stack, $_);
     }
@@ -53,6 +53,6 @@ while (<>) {
     $prev_state = $state;
   }
 
-  printf "$ruler";
-  printf "%s %s\n", $log_level, $message;
-  printf join('', @stack);
+printf "$ruler";
+printf "%s %s\n", $log_level, $message;
+printf join('', @stack);
