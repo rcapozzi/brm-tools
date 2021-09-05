@@ -201,8 +201,6 @@ sub doc2hash {
 		next if $line =~ /^#/;
 		if ($line =~ /^(\d+)\s+(.*?)\s+(\w+)\s+\[(\d+)\]\s*(.*$)/) {
 			($level, $fld_name, $fld_type, $fld_idx, $fld_value) = (int($1), $2, $3, $4, $5);
-		} else {
-			croak "Bad initial line parse. Line ${lineno} \"$line\"\n";
 		}
 
 		if ($fld_type =~ /STR|POID/) {
@@ -221,7 +219,13 @@ sub doc2hash {
 			$stack[$level]->{$fld_name}->{$fld_idx} = {};
 			$stack[$level+1] = $stack[$level]->{$fld_name}->{$fld_idx};
 		} elsif ($fld_type eq "BUF") {
-			next;
+			if ($line =~ /^x/){
+				@buflines = split(/\s+/,$line);
+				$buflines[1] =~ s/([0-9a-fA-F][0-9a-fA-F])/pack("C", hex($1))/ieg;
+				$stack[$level]->{$fld_name} .= $buflines[1];
+			} else {
+				$stack[$level]->{$fld_name} ='';
+			}
 		} else {
 			croak "Bad parse. Line ${lineno} \"$line\"";
 		}
