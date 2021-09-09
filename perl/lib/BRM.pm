@@ -203,7 +203,7 @@ sub doc2hash {
 			($level, $fld_name, $fld_type, $fld_idx, $fld_value) = (int($1), $2, $3, $4, $5);
 		}
 
-		if ($fld_type =~ /STR|POID/) {
+		if ($fld_type =~ /^(STR|POID)$/) {
 			$fld_value =~ s/\"(.*?)\"/$1/;
 			$stack[$level]->{$fld_name} = $fld_value;
 		} elsif ($fld_type =~ /DECIMAL|INT|ENUM/) {
